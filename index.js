@@ -154,7 +154,7 @@ function sessionIdOf(session) {
 
 /**
  * 「项目」＝会话的工作目录末级目录名。DSH 侧栏把会话按工作区分组，分组名就是它
- * （例如 C:\Users\xxx\Desktop\自制插件 → 自制插件）。header.cwd 在 fork 代码里被显式继承，字段可靠。
+ * （例如 H:\DSH-plugins\dsh-task-alert → dsh-task-alert）。header.cwd 在 fork 代码里被显式继承，字段可靠。
  */
 function projectOf(session) {
   const cwd = asString(headerOf(session)?.cwd) ?? asString(session?.cwd);
