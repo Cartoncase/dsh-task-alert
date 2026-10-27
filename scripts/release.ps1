@@ -18,7 +18,9 @@ Set-Location $repo
 function W($m) { Write-Output $m }
 function Step($m) { Write-Output ""; Write-Output "== $m ==" }
 function ReadVersion {
-  return (Get-Content (Join-Path $repo 'package.json') -Raw | ConvertFrom-Json).version
+  # must pass -Encoding UTF8: package.json contains Chinese (description), and PS 5.1
+  # otherwise decodes a BOM-less file as ANSI, which breaks ConvertFrom-Json.
+  return (Get-Content (Join-Path $repo 'package.json') -Raw -Encoding UTF8 | ConvertFrom-Json).version
 }
 
 # ---------- 0) must start from a clean tree ----------
