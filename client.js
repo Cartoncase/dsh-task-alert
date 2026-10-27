@@ -136,6 +136,8 @@ window.__ModuleLoader__.load({
       '.dta-head{display:flex;align-items:center;gap:8px}',
       '.dta-badge{flex:0 0 auto;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;background:var(--dta-accent,#4c6ef5);line-height:1}',
       '.dta-title{flex:1 1 auto;font-weight:600;font-size:13.5px;letter-spacing:.1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      // 主标题：哪次对话 / 哪个项目。整张卡最显眼的一行。
+      '.dta-headline{font-weight:700;font-size:15.5px;line-height:1.4;letter-spacing:.1px;color:var(--dsw-alias-label-primary,#1b1e26);word-break:break-word;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}',
       '.dta-close{flex:0 0 auto;border:0;background:transparent;color:var(--dsw-alias-label-tertiary,#8a90a0);cursor:pointer;font-size:15px;line-height:1;padding:2px 4px;border-radius:6px}',
       '.dta-close:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(122,140,175,.14));color:var(--dsw-alias-label-primary,#1b1e26)}',
       '.dta-body{color:var(--dsw-alias-label-secondary,#4a5061);white-space:pre-wrap;word-break:break-word;max-height:9em;overflow:auto}',
@@ -254,49 +256,42 @@ window.__ModuleLoader__.load({
       }
     }
 
-    /** 人话标识：会话名优先，其次项目名，实在没有才说"本轮对话"——绝不甩一串 id 给用户看。 */
-    function sessionLabel(frame) {
-      if (frame.sessionTitle) return '会话「' + frame.sessionTitle + '」';
-      if (frame.project) return '项目「' + frame.project + '」里的这轮对话';
-      return '本轮对话';
-    }
-
+    /**
+     * 一张卡片的层级：**主标题是"哪次对话 / 哪个项目"**，事件类型退成顶上的小徽章。
+     * 用户一眼要看出"这是哪件事"，而不是"这是什么类型的通知"。
+     */
     function describe(frame) {
-      if (frame.kind === 'approval') {
-        var tool = frame.toolName ? '工具 ' + frame.toolName + ' 请求越权执行' : '有操作等待你批准';
-        return {
-          title: kindLabel('approval'),
-          body: (frame.reason ? frame.reason + '\n' : '') + tool,
-          accent: 'approval',
-        };
-      }
-      if (frame.kind === 'done') {
-        return { title: kindLabel('done'), body: sessionLabel(frame) + '已结束，可以看结果了。', accent: 'done' };
-      }
-      if (frame.kind === 'error') {
-        return {
-          title: kindLabel('error'),
-          body: (frame.message || '生成过程出错了，点开看看。') + '\n' + sessionLabel(frame),
-          accent: 'error',
-        };
-      }
-      if (frame.kind === 'truncated') {
-        return {
-          title: kindLabel('truncated'),
-          body: sessionLabel(frame) + '的输出触到上限被截断了。',
-          accent: 'truncated',
-        };
-      }
-      return { title: kindLabel(frame.kind), body: frame.body || frame.message || '', accent: 'test' };
-    }
+      var label = kindLabel(frame.kind);
+      var hasTitle = Boolean(frame.sessionTitle);
+      var headline = hasTitle
+        ? frame.sessionTitle
+        : frame.project
+          ? '项目「' + frame.project + '」'
+          : '本轮对话';
 
-    /** 这条提醒属于哪个项目 / 哪次对话 —— 只写"有操作要审批"等于什么都没说。 */
-    function contextOf(frame) {
-      var parts = [];
-      if (frame.project) parts.push('项目：' + frame.project);
-      if (frame.sessionTitle) parts.push('会话：' + frame.sessionTitle);
-      if (frame.toolName && frame.kind === 'approval') parts.push('工具：' + frame.toolName);
-      return parts;
+      var meta = [];
+      if (hasTitle && frame.project) meta.push('项目：' + frame.project);
+      if (frame.kind === 'approval' && frame.toolName) meta.push('工具：' + frame.toolName);
+
+      var detail;
+      var accent = 'test';
+      if (frame.kind === 'approval') {
+        detail = frame.reason || '工具 ' + (frame.toolName || '') + ' 请求越权执行';
+        accent = 'approval';
+      } else if (frame.kind === 'error') {
+        detail = frame.message || '生成过程出错了，点开看看。';
+        accent = 'error';
+      } else if (frame.kind === 'truncated') {
+        detail = '输出触到上限被截断了。';
+        accent = 'truncated';
+      } else if (frame.kind === 'done') {
+        detail = '已结束，可以看结果了。';
+        accent = 'done';
+      } else {
+        detail = frame.body || frame.message || '';
+      }
+
+      return { label: label, headline: headline, meta: meta, detail: detail, accent: accent };
     }
 
     function showCard(frame) {
@@ -311,7 +306,7 @@ window.__ModuleLoader__.load({
 
       var head = makeEl('div', 'dta-head');
       head.appendChild(makeEl('span', 'dta-badge', kindBadge(frame.kind)));
-      head.appendChild(makeEl('span', 'dta-title', info.title));
+      head.appendChild(makeEl('span', 'dta-title', info.label));
       var close = makeEl('button', 'dta-close', '×');
       close.type = 'button';
       close.title = '关闭';
@@ -321,10 +316,10 @@ window.__ModuleLoader__.load({
       head.appendChild(close);
       card.appendChild(head);
 
-      card.appendChild(makeEl('div', 'dta-body', info.body));
-
-      var metaParts = contextOf(frame);
-      if (metaParts.length) card.appendChild(makeEl('div', 'dta-meta', metaParts.join(' · ')));
+      // 主标题：哪次对话 / 哪个项目，占最大字号
+      card.appendChild(makeEl('div', 'dta-headline', info.headline));
+      if (info.meta.length) card.appendChild(makeEl('div', 'dta-meta', info.meta.join(' · ')));
+      if (info.detail) card.appendChild(makeEl('div', 'dta-body', info.detail));
 
       var foot = makeEl('div', 'dta-foot');
       var gear = makeEl('button', 'dta-btn', '设置');
@@ -638,19 +633,23 @@ window.__ModuleLoader__.load({
       }
     }
 
+    /** 系统通知的标题也把"哪次对话"顶在前面，别只写个"DSH 任务完成"。 */
     function osTitle(frame) {
-      if (frame.kind === 'approval') return 'DSH 需要你批准';
-      if (frame.kind === 'done') return 'DSH 任务完成';
-      if (frame.kind === 'error') return 'DSH 生成失败';
-      if (frame.kind === 'truncated') return 'DSH 输出被截断';
-      return 'DSH 提醒';
+      var info = describe(frame);
+      var prefix = { approval: 'DSH 需要你批准', done: 'DSH 任务完成', error: 'DSH 生成失败', truncated: 'DSH 输出被截断' }[
+        frame.kind
+      ];
+      var head = info.headline;
+      if (!prefix) return head ? 'DSH 提醒 · ' + head : 'DSH 提醒';
+      return head ? prefix + ' · ' + head : prefix;
     }
 
     function osBody(frame) {
       var info = describe(frame);
-      var body = info.body || info.title;
-      var parts = contextOf(frame);
-      if (parts.length) body = body + '\n' + parts.join(' · ');
+      var lines = [];
+      if (info.meta.length) lines.push(info.meta.join(' · '));
+      if (info.detail) lines.push(info.detail);
+      var body = lines.join('\n');
       if (body.length > 240) body = body.slice(0, 239) + '…';
       return body;
     }

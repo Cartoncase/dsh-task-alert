@@ -314,13 +314,16 @@ const root = document.querySelector('.dta-root');
 assert.ok(root, '收到提醒后应建立弹窗容器');
 assert.equal(root.childNodes.length, 1);
 assert.equal(root.firstChild.dataset.kind, 'done');
-assert.match(root.firstChild.textAll, /任务完成/);
+assert.match(root.firstChild.textAll, /任务完成/, '事件类型仍在（小徽章那条）');
 assert.match(root.firstChild.textAll, /写插件/);
 assert.match(root.firstChild.textAll, /项目：自制插件/, '卡片要写清是哪个项目');
-assert.match(root.firstChild.textAll, /会话：写插件/, '卡片要写清是哪次对话');
+// 主标题必须是会话名本身（最显眼那一行），而不是藏在次要信息里
+const headlineEl = root.firstChild.childNodes.find((node) => /dta-headline/.test(node.className || ''));
+assert.ok(headlineEl, '卡片应有主标题行');
+assert.equal(headlineEl.textContent, '写插件', '主标题＝会话名');
 assert.equal(notifications.length, 0, '窗口在前台不发系统通知');
 
-// 5) 后台时：发系统通知
+// 5) 后台时：发系统通知（标题也把会话/项目顶在前面）
 document.visibilityState = 'hidden';
 lastEventSource.emit({ kind: 'approval', seq: 2, sessionId: 's2', toolName: 'bash', reason: '要写工作区外文件' });
 assert.equal(notifications.length, 1, '后台应发系统通知');
