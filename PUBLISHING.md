@@ -186,7 +186,35 @@ DSH 启动前会检查插件声明的目标版本（`dsh-app-boot` 的规则）�
 
 ---
 
-## 7. 发布后自己验一遍
+## 7. 发新版本（第一次发布之后）
+
+一条命令：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\release.ps1            # patch
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\release.ps1 -Bump minor
+```
+
+它按顺序做，**任何一步失败就停**，不会出现"tag 推了但包没发"：
+
+1. 检查工作区干净（脏的话直接拒绝，避免把半成品提交进去）
+2. `npm version <bump> --no-git-tag-version` 升 `package.json`
+3. `npm test`（两个离线测试）
+4. `npm pack` 解包跑 `test/pack-smoke.mjs`（验的是**真会发出去的那份**）
+5. `git commit` + `git tag vX.Y.Z` + 推 main 与 tag
+6. `npm publish --access public`
+7. 同步到本机 `~/.dsh/profiles/desktop/node_modules/dsh-task-alert`
+
+发完**重启 DSH**（宿主半边只在启动时加载），然后 `curl http://127.0.0.1:<port>/task-alert/health` 看版本号对不对。
+
+发之前别忘了：把这次改动写进 [CHANGELOG.md](CHANGELOG.md)。
+
+> 版本号怎么选（语义化版本，`0.x` 阶段）：修 bug → `patch`；
+> 加功能（可能改变默认行为）→ `minor`；破坏性改动 → `major`（到 `1.0.0` 之后）。
+
+---
+
+## 8. 发布后自己验一遍
 
 ```powershell
 # 1) 用 npm 上那份装（换一台机器或先卸载本地这份）

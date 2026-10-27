@@ -148,9 +148,24 @@ node .\test\pack-smoke.mjs $env:TEMP\package   # 清单字段 / entry id / 客�
 - 系统通知依赖 Windows 通知权限；权限没给时只有页内卡片（卡片上的「开启」按钮可以补授权）。
 - 卡片显示的是 DSH 给会话起的名字（`session/title` 事件 / `sessionTitle` 服务）。极少见地取不到时显示「本轮对话」，不会把会话 id 甩给用户。
 
-## 发布
+## 发布 / 发新版本
 
-见 [PUBLISHING.md](PUBLISHING.md)：GitHub 仓库怎么建、npm 怎么发、社区插件市场怎么收录。
+**第一次发布**（建仓库、发 npm、进社区市场）见 [PUBLISHING.md](PUBLISHING.md)。
+
+**以后发新版本**一条命令：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\release.ps1          # patch：0.2.4 → 0.2.5
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\release.ps1 -Bump minor
+```
+
+它依次做：检查工作区干净 → 升版本号 → `npm test` → 打包装进临时目录跑冒烟测试 →
+提交 → 打 tag → 推 main 与 tag → `npm publish` → 同步到本机 DSH profile。
+任何一步失败就停在那一步，**不会留下"tag 推了但包没发"的半成品**（提交/推送都在测试通过之后）。
+
+`-DryRun` 只升版本并跑测试，不提交不发包。
+
+发完要**重启一次 DSH**：宿主半边只在启动时加载。版本记录写进 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 许可证
 
