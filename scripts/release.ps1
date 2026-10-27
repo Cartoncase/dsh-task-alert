@@ -85,7 +85,10 @@ $code = Invoke-Logged 'npm' @('pack', '--pack-destination', $tmp)
 if ($code -ne 0) { Fail 'npm pack failed' }
 $tgz = Get-ChildItem $tmp -Filter *.tgz | Select-Object -First 1
 if ($null -eq $tgz) { Fail 'npm pack produced no tarball' }
-$code = Invoke-Logged 'tar' @('-xzf', $tgz.FullName, '-C', $tmp)
+# Must use Windows' bsdtar: a Git-for-Windows GNU tar on PATH reads "C:\..." as host "C" and fails.
+$tarExe = Join-Path $env:SystemRoot 'System32\tar.exe'
+if (-not (Test-Path $tarExe)) { Fail "tar.exe not found at $tarExe" }
+$code = Invoke-Logged $tarExe @('-xzf', $tgz.FullName, '-C', $tmp)
 if ($code -ne 0) { Fail 'tar failed' }
 & node (Join-Path $repo 'test\pack-smoke.mjs') (Join-Path $tmp 'package')
 if ($LASTEXITCODE -ne 0) { Fail 'pack smoke failed - nothing was committed or published' }
