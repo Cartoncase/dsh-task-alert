@@ -133,15 +133,15 @@ node .\test\client.test.mjs    # 最小 DOM 桩：配置 → 帧 → 卡片 / �
 
 ```powershell
 npm pack --pack-destination $env:TEMP
-tar -xzf $env:TEMP\dsh-task-alert-0.2.0.tgz -C $env:TEMP
-node .\test\pack-smoke.mjs $env:TEMP\package   # 清单字段 / entry id / 客户端可编译 / 宿主能起 / 配置落盘
+tar -xzf $env:TEMP\dsh-task-alert-0.2.2.tgz -C $env:TEMP
+node .\test\pack-smoke.mjs $env:TEMP\package   # 清单字段 / entry id / 客户端可编译 / 宿主能起 / 配置落盘 / 版本自报
 ```
 
 ## 已知限制
 
 - 同一台机器开多个 DSH 页面时，每个页面各弹一次（每页一条 SSE）。桌面版只有一个页面，不受影响。
 - 系统通知依赖 Windows 通知权限；权限没给时只有页内卡片（卡片上的「开启」按钮可以补授权）。
-- 会话标题取不到时，卡片显示会话 id 尾号（`会话 …8e5d`）。
+- 卡片显示的是 DSH 给会话起的名字（`session/title` 事件 / `sessionTitle` 服务）。极少见地取不到时显示「本轮对话」，不会把会话 id 甩给用户。
 
 ## 发布
 
