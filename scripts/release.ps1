@@ -17,6 +17,9 @@ Set-Location $repo
 
 function W($m) { Write-Output $m }
 function Step($m) { Write-Output ""; Write-Output "== $m ==" }
+function ReadVersion {
+  return (Get-Content (Join-Path $repo 'package.json') -Raw | ConvertFrom-Json).version
+}
 
 # ---------- 0) must start from a clean tree ----------
 Step 'preflight'
@@ -27,14 +30,14 @@ if ($dirty) {
   & git status --short
   throw 'aborted'
 }
-$current = (& node -e 'console.log(require("./package.json").version)')
+$current = ReadVersion
 W "current version: $current"
 
 # ---------- 1) bump ----------
 Step "bump ($Bump)"
 & npm version $Bump --no-git-tag-version --silent | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'npm version failed' }
-$version = (& node -e 'console.log(require("./package.json").version)')
+$version = ReadVersion
 W "new version: $version (tag v$version)"
 
 if ($DryRun) {
