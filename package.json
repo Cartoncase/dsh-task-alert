@@ -1,6 +1,6 @@
 {
   "name": "dsh-task-alert",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "任务完成 / 等待审批时弹窗 + 系统通知提醒：DeepSeek Harness 在后台也不会漏掉。",
   "type": "module",
   "main": "index.js",

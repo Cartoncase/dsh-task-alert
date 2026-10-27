@@ -282,6 +282,11 @@ assert.equal(r.res.status, 405);
 r = await callRoute(h.route, '/task-alert/config', 'POST', '不是对象');
 assert.equal(r.res.status, 400, '坏 body 应 400');
 
+// 11b) health 自报的版本必须和 package.json 一致（曾经写死过，抓过一次）
+const pkgVersion = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
+const healthNow = await callRoute(h.route, '/task-alert/health');
+assert.equal(healthNow.json().version, pkgVersion, 'health.version 不能和 package.json 脱节');
+
 // 12) 卸载：连接被收掉
 const live2 = fakeRes();
 await h.route.handler(fakeReq('/task-alert/events'), live2);
@@ -321,7 +326,7 @@ const firstConfig = JSON.parse(readFileSync(firstFile, 'utf8'));
 assert.equal(firstConfig.dismissSeconds, 12);
 assert.equal(firstConfig.notifyApproval, true);
 const health2 = await callRoute(h2.route, '/task-alert/health');
-assert.equal(health2.json().version, '0.2.0');
+assert.equal(health2.json().version, pkgVersion, '新实例的 health 版本也要跟 package.json 一致');
 rmSync(home2, { recursive: true, force: true });
 
 console.log('host.test OK');

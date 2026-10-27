@@ -35,7 +35,19 @@ const ROUTE_PREFIX = '/task-alert';
 const BUFFER_LIMIT = 200;
 const HEARTBEAT_MS = 15_000;
 const MAX_BODY_BYTES = 64 * 1024;
-const VERSION = '0.2.0';
+
+/**
+ * 版本号从 package.json 读，不要写死——写死过一次，结果 0.2.1 的包对外自报 0.2.0
+ * （打包冒烟测试当场抓到：health.version 与 package.json 不一致）。
+ */
+const VERSION = (() => {
+  try {
+    const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
+    return typeof pkg?.version === 'string' && pkg.version !== '' ? pkg.version : '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+})();
 
 export const name = 'task-alert';
 export const inject = ['webServer'];
