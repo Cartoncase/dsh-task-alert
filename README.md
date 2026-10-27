@@ -1,5 +1,9 @@
 # dsh-task-alert
 
+[![npm](https://img.shields.io/npm/v/dsh-task-alert?color=blue)](https://www.npmjs.com/package/dsh-task-alert)
+[![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-plugin-6b5bd2)](https://github.com/deepseek-ai/deepseek-harness)
+
 给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）做的**任务提醒插件**：
 一轮任务跑完、生成失败、输出被截断、**或者有操作等你批准**的时候，在页面右上角弹一张卡片；
 当 DSH 窗口在后台（被别的窗口盖住 / 最小化）时，同时发一条 **Windows 系统通知**。
