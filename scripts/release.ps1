@@ -61,7 +61,10 @@ Step 'pack smoke'
 $tmp = Join-Path $env:TEMP ("dsh-task-alert-release-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 try {
-  & npm pack --pack-destination $tmp 2>&1 | Out-Null
+  # PS 5.1 会把原生命令写到 stderr 的 notice 当成 NativeCommandError（配合 $ErrorActionPreference='Stop'
+  # 直接中断），所以这里把所有流都丢掉，只靠 $LASTEXITCODE 判断成败。
+  & npm pack --pack-destination $tmp *> $null
+  if ($LASTEXITCODE -ne 0) { throw 'npm pack failed' }
   $tgz = Get-ChildItem $tmp -Filter *.tgz | Select-Object -First 1
   if ($null -eq $tgz) { throw 'npm pack produced no tarball' }
   & tar -xzf $tgz.FullName -C $tmp
