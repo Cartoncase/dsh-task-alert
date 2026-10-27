@@ -120,12 +120,24 @@ const document = {
   querySelector(selector) {
     return head.querySelector(selector) ?? body.querySelector(selector) ?? documentElement.querySelector(selector);
   },
-  addEventListener() {},
-  removeEventListener() {},
+  addEventListener(type, cb) {
+    (docListeners[type] ??= []).push(cb);
+  },
+  removeEventListener(type, cb) {
+    docListeners[type] = (docListeners[type] ?? []).filter((fn) => fn !== cb);
+  },
   hasFocus() {
     return document.visibilityState === 'visible';
   },
 };
+
+// 记录 document / window 上的监听器，测试里可以主动触发
+const docListeners = {};
+const winListeners = {};
+function fireOn(target, type) {
+  const map = target === 'window' ? winListeners : docListeners;
+  for (const cb of map[type] ?? []) cb({ type });
+}
 
 // ------------------------------------------------------------------ 全局桩
 
@@ -143,6 +155,7 @@ let serverConfig = {
   osNotification: true,
   sound: true,
   raiseWindow: true,
+  dismissOnFocus: true,
   dismissSeconds: 5,
   maxCards: 5,
 };
@@ -174,8 +187,12 @@ class FakeEventSource {
 
 globalThis.window = {
   document,
-  addEventListener() {},
-  removeEventListener() {},
+  addEventListener(type, cb) {
+    (winListeners[type] ??= []).push(cb);
+  },
+  removeEventListener(type, cb) {
+    winListeners[type] = (winListeners[type] ?? []).filter((fn) => fn !== cb);
+  },
   focus() {},
   setTimeout,
   Notification: FakeNotification,
@@ -342,7 +359,7 @@ const collect = (node) => {
 collect(quick);
 const checkboxes = inputs.filter((input) => input.type === 'checkbox');
 const numbers = inputs.filter((input) => input.type === 'number');
-assert.equal(checkboxes.length, 4, '精简面板应有 4 个开关');
+assert.equal(checkboxes.length, 5, '精简面板应有 5 个开关（含"回到 DSH 自动收起"）');
 assert.equal(numbers.length, 1, '精简面板应有 1 个"保留秒数"输入框');
 assert.equal(numbers[0].value, '5', '保留秒数应回填配置值');
 
@@ -380,6 +397,26 @@ lastEventSource.emit({ kind: 'done', seq: 6, sessionId: 's9' });
 const visibleAfter = root.childNodes.filter((node) => node.dataset.kind === 'done' && node.dataset.gone !== '1').length;
 assert.equal(visibleAfter, 2, '关掉"任务完成"后不该再弹 done 卡（原有 2 张还在）');
 assert.ok(cursorBefore >= 1);
+
+// 12b) 回到 DSH（窗口获得焦点）应自动收起还挂着的卡片
+document.visibilityState = 'visible';
+lastEventSource.emit({ kind: 'approval', seq: 7, sessionId: 's10', toolName: 'bash' });
+// 卡片全被收掉时容器会被移出 DOM，所以每次都重新查
+const rootNow = () => document.querySelector('.dta-root');
+assert.ok(rootNow(), '应重新建出容器');
+const openBefore = rootNow().childNodes.filter((node) => node.dataset.gone !== '1').length;
+assert.ok(openBefore >= 1, '先得有一张开着的卡');
+fireOn('window', 'focus');
+const openAfter = rootNow().childNodes.filter((node) => node.dataset.gone !== '1').length;
+assert.equal(openAfter, 0, '窗口获得焦点后应把卡片全部收起');
+
+// 12c) 关掉这个开关后就不再自动收
+await globalThis.fetch('/task-alert/config', { method: 'POST', body: JSON.stringify({ dismissOnFocus: false }) });
+await globalThis.window.__dshTaskAlert.reload();
+lastEventSource.emit({ kind: 'approval', seq: 8, sessionId: 's11', toolName: 'pwsh' });
+fireOn('window', 'focus');
+const stillOpen = rootNow().childNodes.filter((node) => node.dataset.gone !== '1').length;
+assert.ok(stillOpen >= 1, '关掉开关后窗口聚焦不该收卡');
 
 // 13) 清理：容器、样式、连接都没了
 document.visibilityState = 'visible';

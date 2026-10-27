@@ -31,6 +31,7 @@ window.__ModuleLoader__.load({
       osNotification: true,
       sound: true,
       raiseWindow: true,
+      dismissOnFocus: true,
       dismissSeconds: 12,
       maxCards: 5,
     };
@@ -226,18 +227,22 @@ window.__ModuleLoader__.load({
       var root = document.querySelector('.dta-root');
       if (!root) return;
       var limit = Math.max(1, Math.min(10, Math.round(config.maxCards) || 5));
-      while (root.childNodes.length > limit) {
-        var victim = null;
-        for (var i = 0; i < root.childNodes.length; i += 1) {
-          var node = root.childNodes[i];
-          if (node.dataset && node.dataset.gone !== '1') {
-            victim = node;
-            break;
-          }
-        }
-        if (!victim) break;
-        dismiss(victim);
-      }
+      // 只数"还开着"的卡片：关闭有 170ms 出场动画，DOM 节点不会立刻消失，
+      // 按 childNodes.length 判断会一直循环、把卡片全部丢光（真踩过的坑）。
+      var open = Array.prototype.slice.call(root.childNodes).filter(function (node) {
+        return node.dataset && node.dataset.gone !== '1';
+      });
+      for (var i = 0; i < open.length - limit; i += 1) dismiss(open[i]);
+    }
+
+    /** 一回到 DSH（窗口重新聚焦 / 页面重新可见）就把还挂着的卡片全收掉。
+     *  审批卡也收：回到界面时 DSH 自己的审批面板就在输入框上方，卡片留着只是碍事。 */
+    function dismissAllCards() {
+      var root = document.querySelector('.dta-root');
+      if (!root) return;
+      Array.prototype.slice.call(root.childNodes).forEach(function (node) {
+        if (node && node.dataset && node.dataset.gone !== '1') dismiss(node);
+      });
     }
 
     /** 页面是否在"用户眼前"：可见且持有焦点。不在眼前才需要系统通知。 */
@@ -388,6 +393,7 @@ window.__ModuleLoader__.load({
         ['inPage', '在页面右上角弹卡片'],
         ['sound', '播放提示音'],
         ['raiseWindow', '点通知后把窗口叫到前台'],
+        ['dismissOnFocus', '回到 DSH 时自动收起'],
       ];
       rows.forEach(function (row) {
         var label = makeEl('label', 'dta-row');
@@ -546,6 +552,7 @@ window.__ModuleLoader__.load({
           toggleRow(state, patch, 'osNotification', '窗口在后台时发系统通知'),
           toggleRow(state, patch, 'sound', '播放提示音'),
           toggleRow(state, patch, 'raiseWindow', '点系统通知后把窗口叫到前台'),
+          toggleRow(state, patch, 'dismissOnFocus', '回到 DSH 时自动收起弹窗'),
 
           h('h3', null, '卡片节奏'),
           h(
@@ -888,8 +895,11 @@ window.__ModuleLoader__.load({
     }
 
     function onVisible() {
-      if (document.visibilityState === 'visible' && es === null) connect();
-      if (document.visibilityState === 'visible') catchUp();
+      var visible = document.visibilityState === 'visible';
+      // 回到 DSH 就清场：卡片的任务是"叫你回来"，回来了就该让位
+      if (visible && config.dismissOnFocus) dismissAllCards();
+      if (visible && es === null) connect();
+      if (visible) catchUp();
     }
 
     // ---------------------------------------------------------------- 装配

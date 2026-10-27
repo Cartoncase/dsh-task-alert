@@ -65,6 +65,8 @@ const DEFAULT_CONFIG = {
   osNotification: true,
   sound: true,
   raiseWindow: true,
+  // 一回到 DSH（窗口获得焦点/页面重新可见）就把还挂着的卡片收掉
+  dismissOnFocus: true,
   // 页内卡片的节奏
   dismissSeconds: 12, // 0 = 不自动关闭
   maxCards: 5,

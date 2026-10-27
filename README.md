@@ -61,6 +61,11 @@ Invoke-WebRequest http://127.0.0.1:61948/task-alert/health -UseBasicParsing | % 
 | `raiseWindow` | `true` | 点系统通知后把 DSH 窗口叫到前台 |
 | `dismissSeconds` | `12` | 卡片保留几秒后自动关闭；`0` = 不自动关闭（审批卡永远常驻） |
 | `maxCards` | `5` | 最多同时显示几张卡片（1–10，超出丢最旧的） |
+| `dismissOnFocus` | `true` | 一回到 DSH（窗口重新获得焦点）就把还挂着的卡片全部收掉 |
+
+> 卡片上还会写清**项目**（会话工作目录名）和**会话标题**，例如
+> `项目：自制插件 · 会话：DSH 任务完成与审批弹窗插件 · 工具：pwsh`——
+> 只写"有操作要审批"是没用的，得让人知道是哪件事。
 
 数值字段越界会被**钳位**而不是报错（`dismissSeconds` 0–600、`maxCards` 1–10），
 配置文件写坏（坏 JSON）会回落到默认值——配置问题不该让插件罢工。
