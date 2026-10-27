@@ -1,0 +1,5 @@
+# dsh-task-alert 的 bundle patch：把提醒插件挂进 DSH 的配置树。
+# id 与包名一致，避免和其它插件的行标识撞车；这一行不要写行尾注释。
+- insert:
+    - id: dsh-task-alert
+      name: 'dsh-task-alert'

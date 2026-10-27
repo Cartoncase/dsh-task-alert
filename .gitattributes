@@ -1,0 +1,5 @@
+# 仓库里一律 LF，Windows 脚本保持 CRLF（PowerShell 5.1 读 .ps1 用系统 ANSI，别让它再被换行符坑一次）
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf

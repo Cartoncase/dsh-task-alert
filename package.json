@@ -1,0 +1,51 @@
+{
+  "name": "dsh-task-alert",
+  "version": "0.2.0",
+  "description": "任务完成 / 等待审批时弹窗 + 系统通知提醒：DeepSeek Harness 在后台也不会漏掉。",
+  "type": "module",
+  "main": "index.js",
+  "icon": "./icon.svg",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "icon.svg",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node test/host.test.mjs && node test/client.test.mjs",
+    "prepublishOnly": "npm test"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "notification",
+    "approval",
+    "toast",
+    "cordis-plugin"
+  ],
+  "license": "MIT",
+  "author": "Cartoncase",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Cartoncase/dsh-task-alert.git"
+  },
+  "homepage": "https://github.com/Cartoncase/dsh-task-alert#readme",
+  "bugs": {
+    "url": "https://github.com/Cartoncase/dsh-task-alert/issues"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  }
+}

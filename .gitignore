@@ -1,0 +1,14 @@
+# 依赖与安装产物
+node_modules/
+pnpm-lock.yaml
+
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# 本地临时产物
+*.log
+.tmp/
+_profile-backup/
