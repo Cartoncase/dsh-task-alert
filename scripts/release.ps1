@@ -48,9 +48,11 @@ Step 'tests'
 if ($LASTEXITCODE -ne 0) { throw 'npm test failed - nothing was committed or published' }
 
 if ($DryRun) {
+  # 演练不留痕：把 npm version 改过的 package.json 还原回去
+  & git checkout -- package.json
   W ''
-  W "DryRun: bump + tests passed, stopped before pack/commit/publish."
-  W "package.json is now $version (undo with: git checkout -- package.json)"
+  W "DryRun: bump + tests passed ($current -> $version), stopped before pack/commit/publish."
+  W 'package.json restored; nothing was committed, tagged or published.'
   return
 }
 
