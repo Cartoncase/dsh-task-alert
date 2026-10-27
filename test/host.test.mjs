@@ -14,6 +14,7 @@ const { apply, inject, name } = await import('../index.js');
 function makeCtx() {
   const listeners = new Map();
   let route = null;
+  const services = new Map();
   const ctx = {
     disposers: [],
     effect(fn) {
@@ -29,6 +30,9 @@ function makeCtx() {
         listeners.set(event, (listeners.get(event) ?? []).filter((fn) => fn !== cb));
       };
     },
+    get(name) {
+      return services.get(name);
+    },
     webServer: {
       register(r) {
         route = r;
@@ -40,6 +44,9 @@ function makeCtx() {
   };
   return {
     ctx,
+    setService(name, value) {
+      services.set(name, value);
+    },
     emit(event, ...args) {
       for (const cb of listeners.get(event) ?? []) cb(...args);
     },
@@ -283,6 +290,23 @@ assert.equal(live2.ended, true, '卸载时应结束长连接');
 
 // 13) 配置文件目录确实是 DSH_HOME 下（不会写到别处）
 assert.ok(existsSync(configFile));
+
+// 13b) 标题来自 session/title 事件 —— DSH 真正的标题来源（不是 header.title）
+const h3 = makeCtx();
+apply(h3.ctx);
+h3.emit('session/event', session('t1'), { type: 'session/title', data: { title: '写插件的小助手' } });
+h3.emit('session/event', session('t1'), { type: 'turn/end', data: { reason: { kind: 'completed' } } });
+const titleFrame = (await callRoute(h3.route, '/task-alert/pending?since=0')).json().items[0];
+assert.equal(titleFrame.sessionTitle, '写插件的小助手', '卡片要显示会话名，不是 id 尾号');
+assert.equal(titleFrame.sessionId, 't1');
+
+// 13c) 没有事件缓存时，退到 ctx.sessionTitle 服务
+const h4 = makeCtx();
+h4.setService('sessionTitle', { get: () => '服务给的标题' });
+apply(h4.ctx);
+h4.emit('session/event', session('t2'), { type: 'turn/end', data: { reason: { kind: 'completed' } } });
+const serviceFrame = (await callRoute(h4.route, '/task-alert/pending?since=0')).json().items[0];
+assert.equal(serviceFrame.sessionTitle, '服务给的标题', '服务兜底也要生效');
 
 rmSync(home, { recursive: true, force: true });
 

@@ -138,7 +138,23 @@ function sessionIdOf(session) {
   return asString(headerOf(session)?.id) ?? asString(session?.id);
 }
 
-function sessionTitleOf(session) {
+/**
+ * 会话标题。DSH 里标题**不在 header 上**，它由 `dsh-session-title` 服务维护：
+ *   · 权威读法：`ctx.sessionTitle.get(session)`（服务不存在时返回 undefined）；
+ *   · 兜底：`session/title` 事件里带的那份（见 apply() 里的 titles 缓存）；
+ *   · 再兜底：header.title / header.name / session.title（少数组合里才有）。
+ * 全部拿不到才返回 undefined——调用方会退到 id 尾号，但正常情况下不该走到那一步。
+ */
+function sessionTitleOf(session, ctx, titleCache) {
+  const sid = sessionIdOf(session);
+  if (sid && titleCache && titleCache.has(sid)) return titleCache.get(sid);
+  try {
+    const service = typeof ctx?.get === 'function' ? ctx.get('sessionTitle') : undefined;
+    const fromService = typeof service?.get === 'function' ? service.get(session) : undefined;
+    if (asString(fromService)) return asString(fromService);
+  } catch {
+    /* 服务形状变了就当取不到，走兜底 */
+  }
   const h = headerOf(session);
   return asString(h?.title) ?? asString(h?.name) ?? asString(session?.title) ?? undefined;
 }
@@ -335,8 +351,26 @@ export function apply(ctx) {
 
   // 宿主事件 → 提醒帧
   ctx.effect(() => {
+    /** sessionId → 标题（来自 session/title 事件；服务取不到时兜底） */
+    const titles = new Map();
+
     const disposeSession = ctx.on('session/event', (session, event) => {
       const type = event?.type;
+
+      // 标题事件：DSH 生成/重命名标题时追加这条，顺手记下来给后面的提醒用
+      if (type === 'session/title') {
+        const sid = sessionIdOf(session);
+        const title = asString(event?.data?.title);
+        if (sid && title) {
+          titles.set(sid, title);
+          if (titles.size > 500) titles.delete(titles.keys().next().value); // 只留最近 500 条，别无限涨
+        }
+        return;
+      }
+
+      const title = () => sessionTitleOf(session, ctx, titles);
+      const sid = sessionIdOf(session);
+
       if (type === 'turn/end') {
         if (isSubagent(session)) return;
         const kind = turnEndKind(event?.data?.reason);
@@ -344,8 +378,8 @@ export function apply(ctx) {
         const reason = event?.data?.reason;
         publish({
           kind,
-          ...(sessionIdOf(session) ? { sessionId: sessionIdOf(session) } : {}),
-          ...(sessionTitleOf(session) ? { sessionTitle: sessionTitleOf(session) } : {}),
+          ...(sid ? { sessionId: sid } : {}),
+          ...(title() ? { sessionTitle: title() } : {}),
           ...(kind === 'error' ? { message: asString(reason?.error?.message) } : {}),
         });
         return;
@@ -355,8 +389,8 @@ export function apply(ctx) {
         const data = event?.data ?? {};
         publish({
           kind: 'approval',
-          ...(sessionIdOf(session) ? { sessionId: sessionIdOf(session) } : {}),
-          ...(sessionTitleOf(session) ? { sessionTitle: sessionTitleOf(session) } : {}),
+          ...(sid ? { sessionId: sid } : {}),
+          ...(title() ? { sessionTitle: title() } : {}),
           ...(asString(data.toolName) ? { toolName: asString(data.toolName) } : {}),
           ...(asString(data.reason) ? { reason: asString(data.reason) } : {}),
           ...(asString(data.callId) ? { callId: asString(data.callId) } : {}),
@@ -370,7 +404,7 @@ export function apply(ctx) {
         publish(
           {
             kind: 'approval-done',
-            ...(sessionIdOf(session) ? { sessionId: sessionIdOf(session) } : {}),
+            ...(sid ? { sessionId: sid } : {}),
             ...(asString(data.toolName) ? { toolName: asString(data.toolName) } : {}),
             ...(asString(data.callId) ? { callId: asString(data.callId) } : {}),
           },

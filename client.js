@@ -249,11 +249,10 @@ window.__ModuleLoader__.load({
       }
     }
 
-    /** 会话的人话标识：优先标题，没有标题就退到 id 尾号。 */
+    /** 会话的人话标识：DSH 的会话名优先；实在没有就说"本轮对话"，绝不甩一串 id 给用户看。 */
     function sessionLabel(frame) {
       if (frame.sessionTitle) return '会话「' + frame.sessionTitle + '」';
-      if (frame.sessionId) return '会话 …' + String(frame.sessionId).slice(-6);
-      return '当前会话';
+      return '本轮对话';
     }
 
     function describe(frame) {
