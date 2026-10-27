@@ -1,99 +1,111 @@
 # Release a new version of dsh-task-alert in one command.
 #
-#   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\release.ps1            # patch bump
-#   ... -Bump minor                                                                       # minor bump
-#   ... -DryRun                                                                           # stop after tests
+#   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\release.ps1
+#   ... -Bump minor        # 0.2.5 -> 0.3.0
+#   ... -DryRun            # bump + tests only, then restore package.json
 #
-# Steps: clean-tree check -> bump -> npm test -> pack+smoke -> commit -> tag -> push -> npm publish -> sync local profile.
-# ASCII-only on purpose: Windows PowerShell 5.1 reads .ps1 as ANSI.
+# Requirements: clean git tree (commit your changes first), npm logged in, DSH profile present.
+# Note: ASCII-only file. Windows PowerShell 5.1 reads .ps1 as ANSI, so a Chinese literal
+# would be mangled. Paths come from $PSScriptRoot at runtime instead.
 param(
   [ValidateSet('patch', 'minor', 'major')][string]$Bump = 'patch',
   [switch]$DryRun
 )
 
-$ErrorActionPreference = 'Stop'
+# PS 5.1 turns native stderr (git warnings, npm notices) into ErrorRecords; with 'Stop'
+# that aborts the script mid-way. So we keep 'Continue' and check $LASTEXITCODE ourselves.
+$ErrorActionPreference = 'Continue'
 $repo = Split-Path -Parent $PSScriptRoot
 Set-Location $repo
 
-function W($m) { Write-Output $m }
-function Step($m) { Write-Output ""; Write-Output "== $m ==" }
+$logFile = Join-Path $env:TEMP ('dsh-release-' + [guid]::NewGuid().ToString('N') + '.log')
+function Say($m) { Write-Output $m }
+function Step($m) { Write-Output ''; Write-Output "== $m ==" }
+
 function ReadVersion {
-  # must pass -Encoding UTF8: package.json contains Chinese (description), and PS 5.1
-  # otherwise decodes a BOM-less file as ANSI, which breaks ConvertFrom-Json.
+  # -Encoding UTF8 is required: package.json has Chinese text and no BOM.
   return (Get-Content (Join-Path $repo 'package.json') -Raw -Encoding UTF8 | ConvertFrom-Json).version
 }
 
-# ---------- 0) must start from a clean tree ----------
+# Run a native command, capturing both streams to the log; returns its exit code.
+function Invoke-Logged {
+  param([string]$Exe, [string[]]$ArgList)
+  & $Exe @ArgList 2>&1 | Out-File -FilePath $logFile -Append -Encoding UTF8
+  return $LASTEXITCODE
+}
+
+function Fail($m) {
+  Write-Output ''
+  Write-Output "FAILED: $m"
+  if (Test-Path $logFile) {
+    Write-Output '--- last output ---'
+    Get-Content $logFile -Tail 25 -Encoding UTF8 | ForEach-Object { Write-Output $_ }
+  }
+  exit 1
+}
+
+# ---------- 0) preflight ----------
 Step 'preflight'
+$statusArgs = @('status', '--porcelain')
 $dirty = (& git status --porcelain) 2>$null
-if ($LASTEXITCODE -ne 0) { throw 'not a git repository' }
+if ($LASTEXITCODE -ne 0) { Fail 'not a git repository' }
 if ($dirty) {
-  W 'working tree is not clean - commit or stash these first:'
+  Say 'working tree is not clean - commit or stash these first:'
   & git status --short
-  throw 'aborted'
+  Fail 'aborted'
 }
 $current = ReadVersion
-W "current version: $current"
+Say "current version: $current"
 
 # ---------- 1) bump ----------
 Step "bump ($Bump)"
-& npm version $Bump --no-git-tag-version --silent | Out-Null
-if ($LASTEXITCODE -ne 0) { throw 'npm version failed' }
+$code = Invoke-Logged 'npm' @('version', $Bump, '--no-git-tag-version', '--silent')
+if ($code -ne 0) { Fail 'npm version failed' }
 $version = ReadVersion
-W "new version: $version (tag v$version)"
+Say "new version: $version (tag v$version)"
 
 # ---------- 2) tests ----------
 Step 'tests'
 & npm test --silent
-if ($LASTEXITCODE -ne 0) { throw 'npm test failed - nothing was committed or published' }
+if ($LASTEXITCODE -ne 0) { Fail 'npm test failed - nothing was committed or published' }
 
 if ($DryRun) {
-  # 演练不留痕：把 npm version 改过的 package.json 还原回去
   & git checkout -- package.json
-  W ''
-  W "DryRun: bump + tests passed ($current -> $version), stopped before pack/commit/publish."
-  W 'package.json restored; nothing was committed, tagged or published.'
-  return
+  Write-Output ''
+  Say "DryRun: bump + tests passed ($current -> $version); package.json restored."
+  Say 'nothing was committed, tagged or published.'
+  exit 0
 }
 
 # ---------- 3) pack + smoke test the exact tarball ----------
 Step 'pack smoke'
-$tmp = Join-Path $env:TEMP ("dsh-task-alert-release-" + [guid]::NewGuid().ToString('N'))
+$tmp = Join-Path $env:TEMP ('dsh-pack-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-try {
-  # PS 5.1 会把原生命令写到 stderr 的 notice 当成 NativeCommandError（配合 $ErrorActionPreference='Stop'
-  # 直接中断），所以这里把所有流都丢掉，只靠 $LASTEXITCODE 判断成败。
-  & npm pack --pack-destination $tmp *> $null
-  if ($LASTEXITCODE -ne 0) { throw 'npm pack failed' }
-  $tgz = Get-ChildItem $tmp -Filter *.tgz | Select-Object -First 1
-  if ($null -eq $tgz) { throw 'npm pack produced no tarball' }
-  & tar -xzf $tgz.FullName -C $tmp
-  if ($LASTEXITCODE -ne 0) { throw 'tar failed' }
-  & node (Join-Path $repo 'test\pack-smoke.mjs') (Join-Path $tmp 'package')
-  if ($LASTEXITCODE -ne 0) { throw 'pack smoke failed - nothing was committed or published' }
-} finally {
-  Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
-}
+$code = Invoke-Logged 'npm' @('pack', '--pack-destination', $tmp)
+if ($code -ne 0) { Fail 'npm pack failed' }
+$tgz = Get-ChildItem $tmp -Filter *.tgz | Select-Object -First 1
+if ($null -eq $tgz) { Fail 'npm pack produced no tarball' }
+$code = Invoke-Logged 'tar' @('-xzf', $tgz.FullName, '-C', $tmp)
+if ($code -ne 0) { Fail 'tar failed' }
+& node (Join-Path $repo 'test\pack-smoke.mjs') (Join-Path $tmp 'package')
+if ($LASTEXITCODE -ne 0) { Fail 'pack smoke failed - nothing was committed or published' }
+Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
 
 # ---------- 4) commit + tag + push ----------
 Step 'git'
-& git add -A
-& git commit -q -m "chore(release): v$version"
-if ($LASTEXITCODE -ne 0) { throw 'git commit failed' }
-& git tag "v$version"
-if ($LASTEXITCODE -ne 0) { throw 'git tag failed (already exists?)' }
-& git push -q origin main
-if ($LASTEXITCODE -ne 0) { throw 'git push failed' }
-& git push -q origin "v$version"
-if ($LASTEXITCODE -ne 0) { throw 'git push tag failed' }
-W "pushed main + v$version"
+if ((Invoke-Logged 'git' @('add', '-A')) -ne 0) { Fail 'git add failed' }
+if ((Invoke-Logged 'git' @('commit', '-q', '-m', "chore(release): v$version")) -ne 0) { Fail 'git commit failed' }
+if ((Invoke-Logged 'git' @('tag', "v$version")) -ne 0) { Fail "git tag v$version failed (already exists?)" }
+if ((Invoke-Logged 'git' @('push', '-q', 'origin', 'main')) -ne 0) { Fail 'git push main failed' }
+if ((Invoke-Logged 'git' @('push', '-q', 'origin', "v$version")) -ne 0) { Fail 'git push tag failed' }
+Say "pushed main + v$version"
 
 # ---------- 5) publish ----------
 Step 'npm publish'
-& npm publish --access public
-if ($LASTEXITCODE -ne 0) { throw 'npm publish failed (2FA / token / network)' }
+if ((Invoke-Logged 'npm' @('publish', '--access', 'public')) -ne 0) { Fail 'npm publish failed (2FA / token / network)' }
+Say "published dsh-task-alert@$version"
 
-# ---------- 6) sync the local DSH profile so the running app can pick it up after restart ----------
+# ---------- 6) sync the local DSH profile ----------
 Step 'sync local profile'
 $dest = Join-Path $env:USERPROFILE '.dsh\profiles\desktop\node_modules\dsh-task-alert'
 if (Test-Path $dest) {
@@ -101,12 +113,13 @@ if (Test-Path $dest) {
     $from = Join-Path $repo $name
     if (Test-Path $from) { Copy-Item -LiteralPath $from -Destination (Join-Path $dest $name) -Force }
   }
-  W "synced to $dest"
+  Say "synced to $dest"
 } else {
-  W "profile dir not found, skipped: $dest"
+  Say "profile dir not found, skipped: $dest"
 }
 
 Step 'done'
-W "released v$version"
-W 'restart DeepSeek Harness to load the new host half, then check:'
-W '  curl http://127.0.0.1:<port>/task-alert/health'
+Say "released v$version"
+Say 'restart DeepSeek Harness to load the new host half, then check:'
+Say '  curl http://127.0.0.1:<port>/task-alert/health'
+exit 0
