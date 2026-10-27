@@ -44,6 +44,20 @@ function Fail($m) {
   exit 1
 }
 
+# Push is the most flaky step on Windows: git's schannel backend occasionally fails the TLS
+# handshake for no reason. One retry with the OpenSSL backend is usually enough.
+function Invoke-Push {
+  param([string[]]$ArgList)
+  if ((Invoke-Logged 'git' (@('push') + $ArgList)) -eq 0) { return 0 }
+  Say 'push failed (usually a transient schannel TLS error) - retrying with the OpenSSL backend'
+  $env:GIT_SSL_BACKEND = 'openssl'
+  try {
+    return (Invoke-Logged 'git' (@('-c', 'http.sslBackend=openssl', 'push') + $ArgList))
+  } finally {
+    Remove-Item Env:\GIT_SSL_BACKEND -ErrorAction SilentlyContinue
+  }
+}
+
 # ---------- 0) preflight ----------
 Step 'preflight'
 $statusArgs = @('status', '--porcelain')
@@ -99,8 +113,8 @@ Step 'git'
 if ((Invoke-Logged 'git' @('add', '-A')) -ne 0) { Fail 'git add failed' }
 if ((Invoke-Logged 'git' @('commit', '-q', '-m', "chore(release): v$version")) -ne 0) { Fail 'git commit failed' }
 if ((Invoke-Logged 'git' @('tag', "v$version")) -ne 0) { Fail "git tag v$version failed (already exists?)" }
-if ((Invoke-Logged 'git' @('push', '-q', 'origin', 'main')) -ne 0) { Fail 'git push main failed' }
-if ((Invoke-Logged 'git' @('push', '-q', 'origin', "v$version")) -ne 0) { Fail 'git push tag failed' }
+if ((Invoke-Push @('origin', 'main')) -ne 0) { Fail 'git push main failed (both schannel and openssl)' }
+if ((Invoke-Push @('origin', "v$version")) -ne 0) { Fail 'git push tag failed (both schannel and openssl)' }
 Say "pushed main + v$version"
 
 # ---------- 5) publish ----------
