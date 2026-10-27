@@ -42,16 +42,17 @@ if ($LASTEXITCODE -ne 0) { throw 'npm version failed' }
 $version = ReadVersion
 W "new version: $version (tag v$version)"
 
-if ($DryRun) {
-  W ''
-  W "DryRun: stopped before commit/publish. package.json is now $version (undo with: git checkout -- package.json)"
-  return
-}
-
 # ---------- 2) tests ----------
 Step 'tests'
 & npm test --silent
 if ($LASTEXITCODE -ne 0) { throw 'npm test failed - nothing was committed or published' }
+
+if ($DryRun) {
+  W ''
+  W "DryRun: bump + tests passed, stopped before pack/commit/publish."
+  W "package.json is now $version (undo with: git checkout -- package.json)"
+  return
+}
 
 # ---------- 3) pack + smoke test the exact tarball ----------
 Step 'pack smoke'
