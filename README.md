@@ -106,7 +106,7 @@ SSE 是长连接，不受定时器节流影响。断线（页面被冻结、DSH 
 | `GET /task-alert/config` | 当前配置 + 配置文件路径（会重读磁盘） |
 | `POST /task-alert/config` | 保存配置（部分字段即可，自动校验钳位） |
 | `GET /task-alert/health` | 存活探测（重启后用它确认插件起来了） |
-| `GET /task-alert/test` | 造一条测试提醒（设置里的「试一下」，绕过类别开关） |
+| `GET /task-alert/test` | 造一条**演示提醒**（设置里的「试一下」）；默认是一条带项目/会话名的完成提醒，可用 `?kind=approval\|error&project=…&title=…` 换场景 |
 
 ## 结构
 

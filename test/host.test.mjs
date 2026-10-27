@@ -271,7 +271,17 @@ assert.equal(r.json().file, configFile);
 
 r = await callRoute(h.route, '/task-alert/test');
 assert.equal(r.json().ok, true);
-assert.equal(r.json().frame.kind, 'approval', '"试一下"要能绕过类别开关');
+assert.equal(r.json().frame.kind, 'done', '演示提醒默认是一条完成提醒（像真的那样带上下文）');
+assert.equal(r.json().frame.project, '自制插件');
+assert.equal(r.json().frame.sessionTitle, '演示会话：这条提醒长这样');
+assert.equal(r.json().frame.titleSource, 'demo');
+
+// 查询参数可改种类与文案，方便截图不同场景
+r = await callRoute(h.route, '/task-alert/test?kind=approval&project=某项目&title=某会话');
+assert.equal(r.json().frame.kind, 'approval');
+assert.equal(r.json().frame.project, '某项目');
+assert.equal(r.json().frame.sessionTitle, '某会话');
+assert.equal(r.json().frame.toolName, 'bash', '审批演示要带工具名，否则卡片没有信息量');
 
 r = await callRoute(h.route, '/task-alert/nope');
 assert.equal(r.res.status, 404);

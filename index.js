@@ -395,16 +395,27 @@ export function apply(ctx) {
     }
 
     if (path === `${ROUTE_PREFIX}/test`) {
+      // 演示提醒：默认造一条"像真的"完成提醒（带项目与会话名），方便截图/验收。
+      // 可用查询参数覆盖：?kind=approval|error|done&project=...&title=...
+      const kindParam = asString(url.searchParams.get('kind'));
+      const kind = kindParam === 'approval' || kindParam === 'error' ? kindParam : 'done';
+      const project = asString(url.searchParams.get('project')) ?? '自制插件';
+      const sessionTitle = asString(url.searchParams.get('title')) ?? '演示会话：这条提醒长这样';
       const frame = publish(
         {
-          kind: 'approval',
-          title: '测试提醒',
-          body: '这是一条测试弹窗：能看到它，说明插件工作正常。',
-          toolName: 'test',
+          kind,
+          project,
+          sessionTitle,
+          titleSource: 'demo',
+          ...(kind === 'approval'
+            ? { toolName: 'bash', reason: '演示：工具请求越权执行' }
+            : kind === 'error'
+              ? { message: '演示：上游 500' }
+              : {}),
         },
         true,
       );
-      return sendJson(res, 200, { ok: true, frame });
+      return sendJson(res, 200, { ok: true, demo: true, frame });
     }
 
     return sendJson(res, 404, { error: 'not found' });
