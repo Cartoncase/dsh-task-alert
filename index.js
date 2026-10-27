@@ -151,24 +151,71 @@ function sessionIdOf(session) {
 }
 
 /**
- * 会话标题。DSH 里标题**不在 header 上**，它由 `dsh-session-title` 服务维护：
- *   · 权威读法：`ctx.sessionTitle.get(session)`（服务不存在时返回 undefined）；
- *   · 兜底：`session/title` 事件里带的那份（见 apply() 里的 titles 缓存）；
- *   · 再兜底：header.title / header.name / session.title（少数组合里才有）。
- * 全部拿不到才返回 undefined——调用方会退到 id 尾号，但正常情况下不该走到那一步。
+ * 「项目」＝会话的工作目录末级目录名。DSH 侧栏把会话按工作区分组，分组名就是它
+ * （例如 C:\Users\xxx\Desktop\自制插件 → 自制插件）。header.cwd 在 fork 代码里被显式继承，字段可靠。
  */
-function sessionTitleOf(session, ctx, titleCache) {
+function projectOf(session) {
+  const cwd = asString(headerOf(session)?.cwd) ?? asString(session?.cwd);
+  if (!cwd) return undefined;
+  const parts = cwd.split(/[\\/]+/).filter(Boolean);
+  return parts.length > 0 ? parts[parts.length - 1] : undefined;
+}
+
+/**
+ * 从会话日志里折叠标题。
+ *
+ * `dsh-session` 的 `commit()` 用 `callbackArgs = [this, event]` 通知 `session/event` 观察者，
+ * 所以第一个参数是**活的 Session 实例**，`snapshotEvents()` 拿得到完整事件日志。
+ * 标题在日志里是 `session/title` 事件，值在 `data.title`（`dsh-session-title` 的纯折叠就是这么写的：
+ * `event.type === 'session/title' ? event.data.title : state`）。
+ */
+function titleFromLog(session) {
+  try {
+    const events = typeof session?.snapshotEvents === 'function' ? session.snapshotEvents() : undefined;
+    if (!Array.isArray(events)) return undefined;
+    for (let i = events.length - 1; i >= 0; i -= 1) {
+      const event = events[i];
+      if (event && event.type === 'session/title') {
+        const title = asString(event.data?.title);
+        if (title) return title;
+      }
+    }
+  } catch {
+    /* 日志形状变了就当取不到 */
+  }
+  return undefined;
+}
+
+/**
+ * 会话标题，按可靠性依次尝试：
+ *   1. 会话日志折叠（最权威，不依赖服务名，也不依赖事件是否经 session/event 转发）；
+ *   2. `session/title` 事件缓存（见 apply()，日志读不到时的退路）；
+ *   3. `ctx.sessionTitle.get(session)` 服务；
+ *   4. header.title / header.name / session.title（少数组合才有）。
+ * 全部拿不到返回 undefined，调用方显示「本轮对话」。
+ * 返回 `{ title, source }`，source 会写进提醒帧，便于排查是走通了哪条路。
+ */
+function resolveSessionTitle(session, ctx, titleCache) {
+  const fromLog = titleFromLog(session);
+  if (fromLog) return { title: fromLog, source: 'log' };
+
   const sid = sessionIdOf(session);
-  if (sid && titleCache && titleCache.has(sid)) return titleCache.get(sid);
+  const cached = sid && titleCache ? titleCache.get(sid) : undefined;
+  if (asString(cached)) return { title: cached, source: 'event' };
+
   try {
     const service = typeof ctx?.get === 'function' ? ctx.get('sessionTitle') : undefined;
     const fromService = typeof service?.get === 'function' ? service.get(session) : undefined;
-    if (asString(fromService)) return asString(fromService);
+    if (asString(fromService)) return { title: asString(fromService), source: 'service' };
   } catch {
-    /* 服务形状变了就当取不到，走兜底 */
+    /* 服务形状变了就当取不到 */
   }
+
   const h = headerOf(session);
-  return asString(h?.title) ?? asString(h?.name) ?? asString(session?.title) ?? undefined;
+  const fromHeader = asString(h?.title) ?? asString(h?.name) ?? asString(session?.title);
+  if (fromHeader) return { title: fromHeader, source: 'header' };
+
+  return { title: undefined, source: 'none' };
 }
 
 /** 子代理 / 更深层委派会话：不提醒（判据不可用时放行）。 */
@@ -380,8 +427,15 @@ export function apply(ctx) {
         return;
       }
 
-      const title = () => sessionTitleOf(session, ctx, titles);
+      const resolved = resolveSessionTitle(session, ctx, titles);
       const sid = sessionIdOf(session);
+      const project = projectOf(session);
+      /** 每条提醒都带上「哪个项目 / 哪次对话」，光说"有操作要审批"等于没说 */
+      const where = {
+        ...(resolved.title ? { sessionTitle: resolved.title } : {}),
+        ...(project ? { project } : {}),
+        titleSource: resolved.source,
+      };
 
       if (type === 'turn/end') {
         if (isSubagent(session)) return;
@@ -391,7 +445,7 @@ export function apply(ctx) {
         publish({
           kind,
           ...(sid ? { sessionId: sid } : {}),
-          ...(title() ? { sessionTitle: title() } : {}),
+          ...where,
           ...(kind === 'error' ? { message: asString(reason?.error?.message) } : {}),
         });
         return;
@@ -402,7 +456,7 @@ export function apply(ctx) {
         publish({
           kind: 'approval',
           ...(sid ? { sessionId: sid } : {}),
-          ...(title() ? { sessionTitle: title() } : {}),
+          ...where,
           ...(asString(data.toolName) ? { toolName: asString(data.toolName) } : {}),
           ...(asString(data.reason) ? { reason: asString(data.reason) } : {}),
           ...(asString(data.callId) ? { callId: asString(data.callId) } : {}),

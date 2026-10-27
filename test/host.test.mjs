@@ -313,6 +313,35 @@ h4.emit('session/event', session('t2'), { type: 'turn/end', data: { reason: { ki
 const serviceFrame = (await callRoute(h4.route, '/task-alert/pending?since=0')).json().items[0];
 assert.equal(serviceFrame.sessionTitle, '服务给的标题', '服务兜底也要生效');
 
+// 13d) 真·活的 Session：标题从日志折叠，项目从 header.cwd 取末级目录
+//      （dsh-session 的 commit() 用 [session, event] 通知观察者，snapshotEvents() 拿得到完整日志）
+const h5 = makeCtx();
+apply(h5.ctx);
+const liveSession = {
+  id: 'p1',
+  header: { id: 'p1', cwd: 'C:\\Users\\someone\\Desktop\\自制插件' },
+  snapshotEvents: () => [
+    { type: 'user/message', data: {} },
+    { type: 'session/title', data: { title: 'DSH 任务完成与审批弹窗插件' } },
+  ],
+};
+h5.emit('session/event', liveSession, { type: 'turn/end', data: { reason: { kind: 'completed' } } });
+const liveFrame = (await callRoute(h5.route, '/task-alert/pending?since=0')).json().items[0];
+assert.equal(liveFrame.sessionTitle, 'DSH 任务完成与审批弹窗插件', '日志里的标题要折叠出来');
+assert.equal(liveFrame.project, '自制插件', '项目名＝工作目录末级目录');
+assert.equal(liveFrame.titleSource, 'log', '能看出标题是从日志取的');
+
+// 审批帧也要带项目和会话（"有操作要审批"必须说清在哪）
+h5.emit('session/event', liveSession, {
+  type: 'approval/asked',
+  data: { toolName: 'bash', reason: '要写工作区外文件' },
+});
+const approvalFrame = (await callRoute(h5.route, '/task-alert/pending?since=1')).json().items[0];
+assert.equal(approvalFrame.kind, 'approval');
+assert.equal(approvalFrame.project, '自制插件');
+assert.equal(approvalFrame.sessionTitle, 'DSH 任务完成与审批弹窗插件');
+assert.equal(approvalFrame.toolName, 'bash');
+
 rmSync(home, { recursive: true, force: true });
 
 // 14) 首次运行（配置文件不存在）应把默认配置落盘，让"配置文件在哪"有个看得见的答案

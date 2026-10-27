@@ -286,13 +286,21 @@ assert.equal(document.querySelector('.dta-root'), null);
 // 4) 聚焦时：只弹页内卡片，不发系统通知
 lastEventSource.onopen();
 lastEventSource.emit({ kind: 'hello', seq: 0, config: serverConfig });
-lastEventSource.emit({ kind: 'done', seq: 1, sessionId: 's1', sessionTitle: '写插件' });
+lastEventSource.emit({
+  kind: 'done',
+  seq: 1,
+  sessionId: 's1',
+  sessionTitle: '写插件',
+  project: '自制插件',
+});
 const root = document.querySelector('.dta-root');
 assert.ok(root, '收到提醒后应建立弹窗容器');
 assert.equal(root.childNodes.length, 1);
 assert.equal(root.firstChild.dataset.kind, 'done');
 assert.match(root.firstChild.textAll, /任务完成/);
 assert.match(root.firstChild.textAll, /写插件/);
+assert.match(root.firstChild.textAll, /项目：自制插件/, '卡片要写清是哪个项目');
+assert.match(root.firstChild.textAll, /会话：写插件/, '卡片要写清是哪次对话');
 assert.equal(notifications.length, 0, '窗口在前台不发系统通知');
 
 // 5) 后台时：发系统通知

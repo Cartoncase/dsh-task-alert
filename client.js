@@ -249,9 +249,10 @@ window.__ModuleLoader__.load({
       }
     }
 
-    /** 会话的人话标识：DSH 的会话名优先；实在没有就说"本轮对话"，绝不甩一串 id 给用户看。 */
+    /** 人话标识：会话名优先，其次项目名，实在没有才说"本轮对话"——绝不甩一串 id 给用户看。 */
     function sessionLabel(frame) {
       if (frame.sessionTitle) return '会话「' + frame.sessionTitle + '」';
+      if (frame.project) return '项目「' + frame.project + '」里的这轮对话';
       return '本轮对话';
     }
 
@@ -284,6 +285,15 @@ window.__ModuleLoader__.load({
       return { title: kindLabel(frame.kind), body: frame.body || frame.message || '', accent: 'test' };
     }
 
+    /** 这条提醒属于哪个项目 / 哪次对话 —— 只写"有操作要审批"等于什么都没说。 */
+    function contextOf(frame) {
+      var parts = [];
+      if (frame.project) parts.push('项目：' + frame.project);
+      if (frame.sessionTitle) parts.push('会话：' + frame.sessionTitle);
+      if (frame.toolName && frame.kind === 'approval') parts.push('工具：' + frame.toolName);
+      return parts;
+    }
+
     function showCard(frame) {
       if (!config.inPage) return null;
       installStyle();
@@ -308,9 +318,7 @@ window.__ModuleLoader__.load({
 
       card.appendChild(makeEl('div', 'dta-body', info.body));
 
-      var metaParts = [];
-      if (frame.toolName && frame.kind === 'approval') metaParts.push('工具：' + frame.toolName);
-      if (frame.sessionTitle) metaParts.push('会话：' + frame.sessionTitle);
+      var metaParts = contextOf(frame);
       if (metaParts.length) card.appendChild(makeEl('div', 'dta-meta', metaParts.join(' · ')));
 
       var foot = makeEl('div', 'dta-foot');
@@ -633,9 +641,11 @@ window.__ModuleLoader__.load({
 
     function osBody(frame) {
       var info = describe(frame);
-      var body = info.body;
-      if (body && body.length > 180) body = body.slice(0, 179) + '…';
-      return body || info.title;
+      var body = info.body || info.title;
+      var parts = contextOf(frame);
+      if (parts.length) body = body + '\n' + parts.join(' · ');
+      if (body.length > 240) body = body.slice(0, 239) + '…';
+      return body;
     }
 
     function osNotify(frame) {
